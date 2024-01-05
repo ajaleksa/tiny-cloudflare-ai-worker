@@ -1,46 +1,59 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run `npm run deploy` to publish your worker
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
+import { Router } from 'itty-router';
+import { Ai } from '@cloudflare/ai';
 
-import handleProxy from './proxy';
-import handleRedirect from './redirect';
-import apiRouter from './router';
+const router = Router();
 
-// Export a default object containing event handlers
+router.post('/chat', async (request, env) => {
+	const { messages } = await request.json();
+
+	// validate body
+	if (!messages)
+		return new Response('Messages are required', { status: 400 });
+	if (!Array.isArray(messages))
+		return new Response('Messages must be an array', { status: 400 });
+
+	for (const message of messages) {
+		if (Object.keys(message).length !== 2)
+			return new Response('Message must have only two keys, "role" and "content"', { status: 400 });
+		if (message.role !== 'assistant' && message.role !== 'user')
+			return new Response('Message role must be "assistant" or "user"', { status: 400 });
+		if (typeof message.content !== 'string')
+			return new Response('Message content is required and must be a string', { status: 400 });
+	}
+
+	const ai = new Ai(env.AI);
+
+	const response = await ai.run('@cf/meta/llama-2-7b-chat-int8', { messages });
+
+	return Response.json(response);
+});
+
+router.post('/image', async (request, env) => {
+	const { prompt } = await request.json();
+
+	if (!prompt && typeof prompt !== 'string')
+		return new Response('Prompt is required and must be a string');
+	if (prompt.length < 1)
+		return new Response('Prompt is required and must be a string');
+
+	const ai = new Ai(env.AI);
+	const response = await ai.run(
+		'@cf/stabilityai/stable-diffusion-xl-base-1.0',
+		{ prompt }
+	);
+
+	return new Response(response, {
+		headers: {
+			'content-type': 'image/png'
+		}
+	});
+});
+
+// 404 for everything else
+router.all('*', () => new Response('Not Found.', { status: 404 }));
+
 export default {
-	// The fetch handler is invoked when this worker receives a HTTP(S) request
-	// and should return a Response (optionally wrapped in a Promise)
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		// You'll find it helpful to parse the request.url string into a URL object. Learn more at https://developer.mozilla.org/en-US/docs/Web/API/URL
-		const url = new URL(request.url);
-
-		// You can get pretty far with simple logic like if/switch-statements
-		switch (url.pathname) {
-			case '/redirect':
-				return handleRedirect.fetch(request, env, ctx);
-
-			case '/proxy':
-				return handleProxy.fetch(request, env, ctx);
-		}
-
-		if (url.pathname.startsWith('/api/')) {
-			// You can also use more robust routing
-			return apiRouter.handle(request);
-		}
-
-		return new Response(
-			`Try making requests to:
-      <ul>
-      <li><code><a href="/redirect?redirectUrl=https://example.com/">/redirect?redirectUrl=https://example.com/</a></code>,</li>
-      <li><code><a href="/proxy?modify&proxyUrl=https://example.com/">/proxy?modify&proxyUrl=https://example.com/</a></code>, or</li>
-      <li><code><a href="/api/todos">/api/todos</a></code></li>`,
-			{ headers: { 'Content-Type': 'text/html' } }
-		);
-	},
-};
+		return router.handle(request, env);
+	}
+}
