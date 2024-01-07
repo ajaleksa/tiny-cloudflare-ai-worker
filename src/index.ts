@@ -20,8 +20,8 @@ router.post('/chat', async (request, env) => {
 	for (const message of messages) {
 		if (Object.keys(message).length !== 2)
 			return new Response('Message must have only two keys, "role" and "content"', { status: 400 });
-		if (message.role !== 'assistant' && message.role !== 'user')
-			return new Response('Message role must be "assistant" or "user"', { status: 400 });
+		if (message.role !== 'assistant' && message.role !== 'user' && message.role !== 'system')
+			return new Response('Message role must be "assistant", "system" or "user"', { status: 400 });
 		if (typeof message.content !== 'string')
 			return new Response('Message content is required and must be a string', { status: 400 });
 	}
