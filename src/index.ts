@@ -1,7 +1,12 @@
 import { Router } from 'itty-router';
 import { Ai } from '@cloudflare/ai';
+import { createCors } from 'itty-cors'
+
+const { preflight, corsify } = createCors()
 
 const router = Router();
+
+router.all('*', preflight);
 
 router.post('/chat', async (request, env) => {
 	const { messages } = await request.json();
@@ -54,6 +59,6 @@ router.all('*', () => new Response('Not Found.', { status: 404 }));
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		return router.handle(request, env);
+		return router.handle(request, env).then(corsify);
 	}
 }
